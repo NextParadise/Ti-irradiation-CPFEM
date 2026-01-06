@@ -5,8 +5,8 @@
 !   作者: 刘博韬
 !   单位: SJTU
 !   创建日期: 2025-11-27
-!   最后修改: 2025-12-2
-!   版本: v0.5
+!   最后修改: 2025-1-6
+!   版本: v0.6
 !     
 !   子程序类型: UMAT (User Material)
 !   适用版本: Abaqus 2020 及以上
@@ -74,7 +74,7 @@ C     | 14*ND - 9 ~ 14*ND           | 旋转张量 RROT(3,3) (结束于 420)   |
 C     +-----------------------------------------------------------------+
 C     | 位错密度变量 (14 ~ 18*ND)                                       |
 C     +-----------------------------------------------------------------+
-C     | 14*ND + 1  ~ 15*ND          | 各滑移系可动位错密度 (Mobile)     |
+C     | 14*ND + 1  ~ 15*ND          | 各滑移系可动位错密度 (Mobile)      |
 C     | 15*ND + 1  ~ 16*ND          | 备用                              |
 C     | 16*ND + 1  ~ 17*ND          | 备用                              |
 C     | 17*ND + 1  ~ 18*ND          | 备用                              |
@@ -92,16 +92,16 @@ C     +-----------------------------------------------------------------+
 C     | 密度演化导数 (22 ~ 29*ND)                                       |
 C     +-----------------------------------------------------------------+
 C     | 22*ND + 1  ~ 23*ND          | d(可动位错)/d(滑移)               |
-C     | 23*ND + 1  ~ 24*ND          | 备用!!可用于孪晶                  |
+C     | 23*ND + 1  ~ 24*ND          | 备用                             |
 C     | 24*ND + 1  ~ 25*ND          | d(空隙)/d(滑移)                   |
 C     | 25*ND + 1  ~ 26*ND          | d(位错环)/d(滑移)                 |
 C     | 26*ND + 1  ~ 27*ND          | d(沉淀相)/d(滑移)                 |
 C     | 27*ND + 1  ~ 28*ND          | 备用                              |
-C     | 28*ND + 1  ~ 29*ND          | 备用                              |
+C     | 28*ND + 1  ~ 29*ND          | d(孔隙率)/d(滑移)                 |
 C     +-----------------------------------------------------------------+
-C     | 全局统计量 (位于数组末尾区域)                                   |
+C     | 全局统计量 (位于数组末尾区域)                                    |
 C     +-----------------------------------------------------------------+
-C     | 29*ND + 1                   | 总可动位错密度 TOTMD              |
+C     | 29*ND + 1                   | 总可动位错密度 TOTMD               |
 C     | 29*ND + 2                   | 备用                              |
 C     | 29*ND + 3                   | 备用                              |
 C     | 29*ND + 4                   | 备用                              |
@@ -113,16 +113,16 @@ C     | 29*ND + 9                   | 总自由程 TOTEMFP                  |
 C     +-----------------------------------------------------------------+
 C     | 滑移系分组信息 (位于 30*ND 之前)                                |
 C     +-----------------------------------------------------------------+
-C     | NSTATV - 30                 | 整体的塑性等效变形                |
-C     | NSTATV - 29                 | 整体的孔隙率                      |
-C     | NSTATV - 28                 | 各个滑移系切应变的加和            |
-C     | NSTATV - 27                 | 各个孪晶系体积分数的加和          |
+C     | NSTATV - 30                 | 整体的孔隙率                      |
+C     | NSTATV - 29                 | 整体的等效塑性应变                 |
+C     | NSTATV - 28                 | 各个滑移系切应变的加和             |
+C     | NSTATV - 27                 | 各个孪晶系体积分数的加和           |
 C     | NSTATV - 9                  | 第1组滑移系数量                   |
 C     | NSTATV - 8                  | 第2组滑移系数量                   |
 C     | NSTATV - 7                  | 第3组滑移系数量                   |
 C     | NSTATV - 6                  | 第4组滑移系数量                   |
 C     | NSTATV - 5                  | 第5组滑移系数量                   |
-C     |                             |                                   |
+C     |                             |                                  |
 C     | NSTATV - 3                  | 滑移组总数 NSET                   |
 C     | NSTATV - 2                  | 孪晶系总数 NTWTL                  |
 C     | NSTATV - 1                  | 滑移系总数 NSLPTL                 |
@@ -157,12 +157,22 @@ C     +-----------------------------------------------------------------+
       REAL*8 DGRAIN                     ! 晶粒尺寸
       REAL*8 HARDM(1:42,1:42)           ! 位错交互硬化矩阵
       REAL*8 HRHO, PMUL, PDYN           ! 位错硬化系数与密度演化参数
-      REAL*8 DISLOCATION_DENSITY(1:5) ! 各滑移系的初始位错密度
+      REAL*8 DISLOCATION_DENSITY(1:5)   ! 各滑移系的初始位错密度
       REAL*8 TAU0_TWIN(1:2)             ! 各个孪晶系的初始切应力
       REAL*8 H_SL_TW                    ! 孪晶对滑移交互硬化系数
       REAL*8 TWIN_D                     ! 孪晶对滑移交互硬化系数
       REAL*8 H_TW_TW                    ! 孪晶对孪晶交互硬化系数
       REAL*8 TWIN_B                     ! 孪晶对孪晶交互硬化系数
+  !---------------------------------------------------------------------
+  ! 2. 孔隙率本构(在fit中赋值)
+  !---------------------------------------------------------------------
+      REAL*8 POROS0                     ! 初始孔隙率
+      REAL*8 PORO_A                     ! 孔隙率影响参数A
+      REAL*8 PORO_B                     ! 孔隙率影响参数B
+      REAL*8 PORO_N                     ! 孔隙率影响参数N(与应变率敏感因子一致)
+      REAL*8 EVALEPN                    ! 形核时基体材料的平均等效塑性应变
+      REAL*8 SEVLEPN                    ! 形核时基体材料的等效塑性应变分布的标准差
+      REAL*8 INCLUSF                    ! 形核时夹杂物的体积分数
   !---------------------------------------------------------------------
   ! 2. 网格与晶粒拓扑
   !---------------------------------------------------------------------        
@@ -243,8 +253,9 @@ C     +-----------------------------------------------------------------+
 
 !     力学变量声明      
       REAL*8 HYSTR, EQVSTR, DEVSTR(6), EQVSTN, DEQVPLDT, EQVPL
+
 !     孔隙率变量声明
-      REAL(kind=8)::EQVSTR0, POROS, PORO_A, W
+      REAL(kind=8)::EQVSTR0, DPOROS, POROS, W
 
 !     位错与缺陷变量声明（辐照硬化）
       REAL(kind=8)::NMD(ND), NVOID(ND), NLOOP(ND), NPRE(ND), EMFP(ND)
@@ -526,9 +537,16 @@ c      read(*,*)
 
 !     初始化孪晶系的切变阻力
         CALL TWIN_TAU_INIT(STATEV(NSLPTL+1)) !!需要修改
-c        DO I=1,ND
-c          write(114517,*) 'TAU0' , I, STATEV(I)
-c        END DO
+
+!     如果考虑孔隙率的话，修正滑移系的阻力，并初始化孔隙率相关变量
+        IF (POROSITY.EQ.1) THEN
+          STATEV(NSTATV-30)=POROS0 !初始化孔隙率
+          STATEV(NSTATV-29)=0.0D0  !初始化等效塑性应变
+          DO I=1,NSLPTL
+            STATEV(28*ND+I)=0.0D0  !初始化d(孔隙率)/d(滑移)
+          END DO
+          CALL PORO_SLIP_INIT(STATEV(1))
+        END IF
 
 !     初始化每个滑移系+孪晶系的剪切应变
         DO I=1,ND
@@ -560,7 +578,10 @@ c        END DO
           END DO
         END DO
 ! -------------------- 结束初始模块 -----------------------!
-!     如果不是初始状态，从状态变量中读取信息      
+
+!**********************************************************
+!     如果不是初始状态，从状态变量中读取信息
+!**********************************************************
       ELSE 
         IF(NOEL.eq.1) THEN
             write(*,*) 'Current state, Time=', Time
@@ -681,7 +702,7 @@ c        END DO
       END IF
 !     调用子程序计算滑移率FSLIP和剪切应力DFDXSP          
       CALL STRAINRATE (STATEV(2*ND+1),STATEV(1),FSLIP(1),DFDXSP(1)) !!需要修改
-! ------------------- 读取计算力学性质 ---------------------!     
+! --------------------- 计算力学性质 -----------------------!     
 !     计算正应力
       HYSTR=0.0D0
       DO I=1,NDI
@@ -717,14 +738,14 @@ c        END DO
       END DO
       IF(EQVSTR.NE.0.0D0) DEQVPLDT=W/EQVSTR
 !     从状态变量中读取总的等效塑性应变
-      EQVPL = STATEV(NSTATV-30)
+      EQVPL = STATEV(NSTATV-29)
 
       IF (POROSITY.EQ.1) THEN
 !     从状态变量中读取孔隙率
-        POROS = STATEV(NSTATV-29)
+        POROS = STATEV(NSTATV-30)
 !     计算基体的流动应力
         W = 0.0D0
-!!        CALL CALC_WEAK_FUNCTION(W, POROS, PORO_A)
+        CALL CALC_WEAK_FUNCTION(W, POROS, PORO_A)
         EQVSTR0=EQVSTR/W
       END IF
 ! ------------------ 结束读取计算力学性质 -------------------!
@@ -733,7 +754,8 @@ c        END DO
       CALL DIS_IRRA_HARD(H,NOEL,NMD,NVOID,NLOOP,NPRE,
      2  SVOID,SLOOP,SPRE,DMDDG,DLOOPDG,EMFP) !!需要修改
       IF (POROSITY.EQ.1) THEN
-!!        CALL POROHARD()!!需要修改
+        CALL PORO_HARD(H, POROS, EQVSTR, HYSTR, EQVPL, 
+     2    STATEV(2*ND+1), STATEV(1), STATEV(28*ND+1))
       END IF
 c      IF (NOEL.EQ.1) write(114514, *) 'H', H 
       CALL TWIN_HARD(H,STATEV(NSTATV-28),STATEV(NSTATV-27)) !!需要修改
@@ -997,11 +1019,12 @@ C      END DO
       STATEV(29*ND+6)=TOTLOOP
       STATEV(29*ND+7)=TOTPRE
       STATEV(29*ND+0)=TOTEMFP
+
 !     修改和存储与孔隙率相关的变量
       IF (POROSITY.EQ.1) THEN
-c        CALL POROEVOL()!!需要修改
-        STATEV(NSTATV-29)=POROS
-        STATEV(NSTATV-30)=EQVPL
+        CALL PORO_EVOL(DGAMMA,POROS,EQVPL,EQVSTR,STATEV(2*ND+1),STATEV(28*ND+1))!!需要修改
+        STATEV(NSTATV-30)=POROS
+        STATEV(NSTATV-29)=EQVPL
         IF (NOEL.eq.1) THEN
           write(6,*) 'Current porosity=', POROS
         END IF
