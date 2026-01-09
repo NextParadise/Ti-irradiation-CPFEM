@@ -1535,3 +1535,4 @@ C-----  Use single precision on cray
 !           SLPDIR：每个滑移系全局向量
 !           SLPNOR：每个滑移系全局法向
       INCLUDE 'DIS_IRRA_HARD.for'
+      INCLUDE 'POROSITY.for'
