@@ -164,6 +164,13 @@ C     +-----------------------------------------------------------------+
       REAL*8 H_TW_TW                    ! 孪晶对孪晶交互硬化系数
       REAL*8 TWIN_B                     ! 孪晶对孪晶交互硬化系数
   !---------------------------------------------------------------------
+  ! 1.5 孪晶切变常数
+  !---------------------------------------------------------------------
+      REAL*8 GAMMA_TT                   ! 拉伸孪晶的参考切变量
+      PARAMETER(GAMMA_TT=0.175D0)
+      REAL*8 GAMMA_CT                   ! 压缩孪晶的参考切变量
+      PARAMETER(GAMMA_CT=0.218D0)
+  !---------------------------------------------------------------------
   ! 2. 孔隙率本构(在fit中赋值)
   !---------------------------------------------------------------------
       REAL*8 POROS0                     ! 初始孔隙率
@@ -194,8 +201,8 @@ C     +-----------------------------------------------------------------+
   !---------------------------------------------------------------------
   ! 4. 本构开关
   !---------------------------------------------------------------------
-      INTEGER NLEGOM                    ! 小变形还是大变形
-      PARAMETER (NLEGOM=1)            
+      INTEGER NLGEOM                    ! 小变形还是大变形(1=小变形,0=大变形)
+      PARAMETER (NLGEOM=1)            
       INTEGER IRADON                    ! 是否考虑辐照影响，1-考虑，0-不考虑
       PARAMETER (IRADON=0)
       INTEGER POROSITY                  ! 是否考虑孔隙率影响，1-考虑，0-不考虑
@@ -767,17 +774,23 @@ c      IF (NOEL.EQ.1) write(114514, *) 'H', H
       DO I=1,ND
         TAUSLP=STATEV(2*ND+I)
         GSLIP=STATEV(I)
+!       添加除零保护
+        IF (DABS(GSLIP).LT.1.0D-20) THEN
+          GSLIP=1.0D-20
+        END IF
+!       先计算X，避免使用未初始化的变量
+        X=TAUSLP/GSLIP
         TERM2=TERM1*DFDXSP(I)/GSLIP
         TERM3=TERM1*X*DFDXSP(I)/GSLIP
         DO J=1,ND
           TERM4=0.0D0
           DO K=1,6
             TERM4=TERM4+DDEMSD(K,I)*SLPDEF(K,J)
-          END DO 
+          END DO
           TEMPWK=TERM2*TERM4+H(I,J)*TERM3*DSIGN(1.D0,FSLIP(J))
 !     PNEWDT为Abaqus的时间步长控制量，如果TEMPWK出现NaN则减小时间步长
           IF (ISNAN(TEMPWK)) THEN
-            PNEWDT=0.1D0 
+            PNEWDT=0.1D0
           ELSE
             WORKST(I,J)=TEMPWK
           END IF
@@ -790,8 +803,7 @@ c      IF (NOEL.EQ.1) write(114514, *) 'H', H
           END IF
         END DO
         WORKST(I,I)=WORKST(I,I)+1.0D0
-!     计算滑移率增量DGAMMA 
-        X=TAUSLP/GSLIP
+!     计算滑移率增量DGAMMA
         DGAMMA(I)=0.0D0
         DO J=1,NDI
             DGAMMA(I)=DGAMMA(I)+DDEMSD(J,I)*DSTRAN(J)
@@ -816,7 +828,10 @@ c      IF (NOEL.EQ.1) write(114514, *) 'H', H
 ! -------------------- 结束计算WORKST --------------------!
 !====================== 计算主体结束 ======================!
 
-!====================== 更新状态变量 ======================!      
+!====================== 更新状态变量 ======================!
+!     初始化SLIP_SUM和TWIN_SUM，避免累加错误
+      SLIP_SUM=0.0D0
+      TWIN_SUM=0.0D0
 !     更新滑移应变和累积滑移应变
       DO I=1,ND
         STATEV(I+ND)=STATEV(I+ND)+DGAMMA(I)
@@ -825,13 +840,13 @@ c      IF (NOEL.EQ.1) write(114514, *) 'H', H
       DO I=1,NSLPTL
         SLIP_SUM = SLIP_SUM+STATEV(9*ND+I)
       END DO
-      !!这一部分指的是拉伸孪晶部分的参考滑移系数是0.175，即切应变/孪晶体积分数=0.175
-      DO I=NSLPTL+1,NSLPTL+NTWIN(1) 
-        TWIN_SUM = TWIN_SUM+STATEV(9*ND+I)/0.175D0
+      !!这一部分指的是拉伸孪晶部分的参考切变量，即切应变/孪晶体积分数=GAMMA_TT
+      DO I=NSLPTL+1,NSLPTL+NTWIN(1)
+        TWIN_SUM = TWIN_SUM+STATEV(9*ND+I)/GAMMA_TT
       END DO
-      !!这一部分指的是压缩孪晶部分的参考滑移系数是0.175，即切应变/孪晶体积分数=0.218
+      !!这一部分指的是压缩孪晶部分的参考切变量，即切应变/孪晶体积分数=GAMMA_CT
       DO I=NSLPTL+NTWIN(1)+1,ND
-        TWIN_SUM = TWIN_SUM+STATEV(9*ND+I)/0.218D0
+        TWIN_SUM = TWIN_SUM+STATEV(9*ND+I)/GAMMA_CT
       END DO
       STATEV(NSTATV-28)=SLIP_SUM !更新所有滑移系切应变的加和
       STATEV(NSTATV-27)=TWIN_SUM !更新所有孪晶系切应变的加和
@@ -1034,7 +1049,11 @@ C      END DO
       DO I=1,NTENS
          DO J=1,ND
             TAUSLP=STATEV(2*ND+J)
-            GSLIP=STATEV(J)    
+            GSLIP=STATEV(J)
+!           添加除零保护
+            IF (DABS(GSLIP).LT.1.0D-20) THEN
+              GSLIP=1.0D-20
+            END IF
             X=TAUSLP/GSLIP
             TERM2=TERM1*DFDXSP(J)/GSLIP
             IF (I.LE.NDI) THEN
@@ -1162,6 +1181,11 @@ c      WRITE(114517,*) 'D_AFTER'
 c      WRITE(114517,*)  D
 !888888888888888888888888888888888!
 !==================== 更新状态变量结束 =====================!
+!     关闭调试文件
+      CLOSE(UNIT=114514)
+      CLOSE(UNIT=114515)
+      CLOSE(UNIT=114516)
+      CLOSE(UNIT=114517)
 !     主程序结束
       RETURN
       END

@@ -213,12 +213,7 @@ C-------------------------------------------------------------------------------
       IMPLICIT NONE
       INTEGER::I,J
       DOUBLE PRECISION::H(ND,ND),SLIP_SUM,TWIN_SUM
-      ! 滑移系对于滑移系的硬化矩阵H(1:NS,1:NS)(由前给出)
-      DO I=1,NSLPTL
-        DO J=1,NSLPTL
-          H(I,J)=H(I,J)  
-        END DO
-      END DO
+      ! 滑移系对于滑移系的硬化矩阵H(1:NS,1:NS)(由DIS_IRRA_HARD给出，此处不需要修改)
       ! 滑移系对孪晶系的硬化矩阵H(NS+1:ND,1:NS)(认为滑移系对于孪晶系硬化为0)
       DO I=NSLPTL+1,ND
         DO J=1,NSLPTL

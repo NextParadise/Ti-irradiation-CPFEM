@@ -72,9 +72,9 @@ C-CALC_DPORDG 功能为计算孔隙率对滑移的导数
             Y = 0.0D0
           END IF
           DFDGN = INCLUSF/(DSQRT(2.0D0*PI)*SEVLEPN) *
-     &    DEXP(-0.5D0*((EQVPL-EVALEPN)/SEVLEPN)**2.0D0) * X   
-          DFDGE = (PORO_B * DSINH((N-0.5D0)/(N+0.5D0)*Y) * 
-     &    ((1.0D0-POROS)**(-N)-(1.0D0-POROS))) * DSIGN(1.0D0, X)
+     &    DEXP(-0.5D0*((EQVPL-EVALEPN)/SEVLEPN)**2.0D0) * X
+          DFDGE = (PORO_B * DSINH((PORO_N-0.5D0)/(PORO_N+0.5D0)*Y) *
+     &    ((1.0D0-POROS)**(-PORO_N)-(1.0D0-POROS))) * DSIGN(1.0D0, X)
           DFDG(I) = DFDGN + DFDGE
         END DO
       RETURN  
