@@ -58,7 +58,7 @@ C-CALC_DPORDG 功能为计算孔隙率对滑移的导数
         REAL(KIND=8)::HYSTR, EQVSTR, EQVPL, TAUSLP(ND)
         real(KIND=8)::PI = 3.1415926535D0               
 
-        DO I = 1, ND
+        DO I = 1, NSLPTL
           X = TAUSLP(I)/EQVSTR
           Y = HYSTR/EQVSTR
           IF (X.GE.-1.0D3.AND.X.LE.1.0D3) THEN !(2025/05/26 lbt:如果X为NaN，则将其置为0)
@@ -73,8 +73,8 @@ C-CALC_DPORDG 功能为计算孔隙率对滑移的导数
           END IF
           DFDGN = INCLUSF/(DSQRT(2.0D0*PI)*SEVLEPN) *
      &    DEXP(-0.5D0*((EQVPL-EVALEPN)/SEVLEPN)**2.0D0) * X   
-          DFDGE = (PORO_B * DSINH((N-0.5D0)/(N+0.5D0)*Y) * 
-     &    ((1.0D0-POROS)**(-N)-(1.0D0-POROS))) * DSIGN(1.0D0, X)
+          DFDGE = (PORO_B * DSINH((PORO_N-0.5D0)/(PORO_N+0.5D0)*Y) * 
+     &    ((1.0D0-POROS)**(-PORO_N)-(1.0D0-POROS))) * DSIGN(1.0D0, X)
           DFDG(I) = DFDGN + DFDGE
         END DO
       RETURN  
@@ -91,7 +91,7 @@ C-POROEVOL 功能为对孔隙率与等效塑性应变进行迭代
         REAL(KIND=8)::W, X
         DPOROS = 0.0D0
         DEQVPL = 0.0D0
-        DO I = 1, ND
+        DO I = 1, NSLPTL
           X = TAUSLP(I)/EQVSTR
           IF (X.GE.-1.0D3.AND.X.LE.1.0D3) THEN !(2025/05/26 lbt:如果X为NaN，则将其置为0)
             X = X
