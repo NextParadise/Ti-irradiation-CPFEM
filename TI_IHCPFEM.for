@@ -198,15 +198,26 @@ C     +-----------------------------------------------------------------+
   ! 4. 本构开关
   !---------------------------------------------------------------------
       INTEGER NLEGOM                    ! 小变形还是大变形
-      PARAMETER (NLEGOM=1)            
+      PARAMETER (NLEGOM=1)
       INTEGER IRADON                    ! 是否考虑辐照影响，1-考虑，0-不考虑
       PARAMETER (IRADON=0)
       INTEGER POROSITY                  ! 是否考虑孔隙率影响，1-考虑，0-不考虑
       PARAMETER (POROSITY=1)
       INTEGER LAYERSTRUCTURE            ! 是否考虑层状组织影响，1-层状组织，0-等轴组织
   !---------------------------------------------------------------------
-  ! 4. 调试参数
-  !---------------------------------------------------------------------      
+  ! 5. 非局部化模型变量（用于孔隙率演化的正则化）
+  !---------------------------------------------------------------------
+      REAL*8 EQVPL_SUM(GRNUM)           ! 各晶粒内等效塑性应变累加和
+      REAL*8 EQVPL_AVG(GRNUM)           ! 各晶粒的平均等效塑性应变（非局部值）
+      INTEGER GRAIN_NPTS(GRNUM)         ! 各晶粒内积分点计数
+      INTEGER KINC_PREV                 ! 上一增量步编号（用于检测新增量步）
+      DATA EQVPL_SUM /GRNUM*0.0D0/      ! 初始化为0
+      DATA EQVPL_AVG /GRNUM*0.0D0/      ! 初始化为0
+      DATA GRAIN_NPTS /GRNUM*0/         ! 初始化为0
+      DATA KINC_PREV /0/                ! 初始化为0
+  !---------------------------------------------------------------------
+  ! 6. 调试参数
+  !---------------------------------------------------------------------
       INTEGER PROBLEM                   ! 调试参数，1-出现问题，0-没有问题
       END MODULE PARABANK
 !=======================================================================
@@ -259,6 +270,7 @@ C     +-----------------------------------------------------------------+
 
 !     孔隙率变量声明
       REAL(kind=8)::EQVSTR0, DPOROS, POROS, W
+      REAL(kind=8)::EQVPL_NL                   ! 非局部等效塑性应变（晶粒平均）
 
 !     位错与缺陷变量声明（辐照硬化）
       REAL(kind=8)::NMD(ND), NVOID(ND), NLOOP(ND), NPRE(ND), EMFP(ND)
@@ -290,6 +302,30 @@ c      write(*,*) "Please input an interger:"
 c      read(*,*)
 
       PROBLEM = 0
+
+!===================== 非局部化模型：晶粒平均计算 =====================!
+!     检测是否进入新的增量步，如果是则计算上一步的晶粒平均值
+      IF (POROSITY.EQ.1) THEN
+        IF (KINC .NE. KINC_PREV) THEN
+!         新增量步开始，计算上一步各晶粒的平均等效塑性应变
+          DO I = 1, GRNUM
+            IF (GRAIN_NPTS(I) .GT. 0) THEN
+              EQVPL_AVG(I) = EQVPL_SUM(I) / DBLE(GRAIN_NPTS(I))
+            ELSE
+              EQVPL_AVG(I) = 0.0D0
+            END IF
+!           重置累加器，准备下一增量步
+            EQVPL_SUM(I) = 0.0D0
+            GRAIN_NPTS(I) = 0
+          END DO
+          KINC_PREV = KINC
+!         调试输出（可注释）
+          IF (NOEL.EQ.1 .AND. NPT.EQ.1) THEN
+            WRITE(6,*) 'Nonlocal: KINC=', KINC, ' EQVPL_AVG updated'
+          END IF
+        END IF
+      END IF
+!=================== 非局部化模型：晶粒平均计算结束 ===================!
 
 !     输出文件变量声明与定义
       call getoutdir(site,lenoutdir)
@@ -1025,11 +1061,25 @@ C      END DO
 
 !     修改和存储与孔隙率相关的变量
       IF (POROSITY.EQ.1) THEN
-        CALL PORO_EVOL(DGAMMA,POROS,EQVPL,EQVSTR,STATEV(2*ND+1),STATEV(28*ND+1))!!需要修改
+!       获取当前积分点所属晶粒的非局部（晶粒平均）等效塑性应变
+        IF (EQVPL_AVG(IGRAIN) .GT. 0.0D0) THEN
+!         使用非局部值（晶粒平均）
+          EQVPL_NL = EQVPL_AVG(IGRAIN)
+        ELSE
+!         第一个增量步或无数据时，使用局部值作为fallback
+          EQVPL_NL = EQVPL
+        END IF
+!       调用孔隙率演化，传入非局部等效塑性应变
+        CALL PORO_EVOL(DGAMMA,POROS,EQVPL,EQVPL_NL,EQVSTR,
+     2    STATEV(2*ND+1),STATEV(28*ND+1))
+!       累加当前积分点的EQVPL到所属晶粒（用于下一增量步的平均计算）
+        EQVPL_SUM(IGRAIN) = EQVPL_SUM(IGRAIN) + EQVPL
+        GRAIN_NPTS(IGRAIN) = GRAIN_NPTS(IGRAIN) + 1
+!       存储状态变量
         STATEV(NSTATV-30)=POROS
         STATEV(NSTATV-29)=EQVPL
-        IF (NOEL.eq.1) THEN
-          write(6,*) 'Current porosity=', POROS
+        IF (NOEL.eq.1 .AND. NPT.eq.1) THEN
+          write(6,*) 'Porosity=', POROS, ' EQVPL_NL=', EQVPL_NL
         END IF
       END IF
 !     计算DDSDDE的前置矩阵DDGDDE(滑移率增量对于变形增量的偏导)
