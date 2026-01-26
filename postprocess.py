@@ -170,8 +170,19 @@ def extract_data_from_odb(odb_path, output_file=None):
                 vol_sum += vol
             stress_data[i_frame] = stress_sum / vol_sum
 
-        # 提取应变
-        if 'E' in frame.fieldOutputs:
+        # 提取应变（使用真应变LE，对数应变）
+        if 'LE' in frame.fieldOutputs:
+            strain_field = frame.fieldOutputs['LE']
+            strain_values = strain_field.getSubset(region=instance)
+            strain_sum = np.zeros(6)
+            vol_sum = 0.0
+            for val in strain_values.values:
+                vol = element_volumes[0]
+                strain_sum += np.array(val.data) * vol
+                vol_sum += vol
+            strain_data[i_frame] = strain_sum / vol_sum
+        elif 'E' in frame.fieldOutputs:
+            # 如果没有LE，回退到工程应变E
             strain_field = frame.fieldOutputs['E']
             strain_values = strain_field.getSubset(region=instance)
             strain_sum = np.zeros(6)

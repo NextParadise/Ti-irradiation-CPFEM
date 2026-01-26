@@ -9819,7 +9819,7 @@ __PICKEDSURF6945_S2_1, S2
 ** STEP: Step-1
 ** 
 *Step, name=Step-1, nlgeom=YES, inc=1000000
-*Static
+*Static, stabilize=2e-4, allsdtol=0.05, continue=NO
 0.05,  100, 0.0000000001, 1.0
 ** BOUNDARY CONDITIONS
 ** 
@@ -9850,7 +9850,7 @@ _PICKEDSET6948, 3, 3, 0.004
 **
 * Output, FIELD, frequency=1
 *Element Output, directions=YES
-S, LE, IVOL
+S, LE, IVOL, SDV
 ** 
 ** HISTORY OUTPUT: H-Output-1
 ** 
