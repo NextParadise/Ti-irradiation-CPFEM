@@ -211,10 +211,12 @@ C     +-----------------------------------------------------------------+
       REAL*8 EQVPL_AVG(GRNUM)           ! 各晶粒的平均等效塑性应变（非局部值）
       INTEGER GRAIN_NPTS(GRNUM)         ! 各晶粒内积分点计数
       INTEGER KINC_PREV                 ! 上一增量步编号（用于检测新增量步）
+      INTEGER ITER_COUNT                ! 迭代计数器（用于检测新迭代）
       DATA EQVPL_SUM /GRNUM*0.0D0/      ! 初始化为0
       DATA EQVPL_AVG /GRNUM*0.0D0/      ! 初始化为0
       DATA GRAIN_NPTS /GRNUM*0/         ! 初始化为0
       DATA KINC_PREV /0/                ! 初始化为0
+      DATA ITER_COUNT /0/               ! 初始化为0
   !---------------------------------------------------------------------
   ! 6. 调试参数
   !---------------------------------------------------------------------
@@ -304,24 +306,50 @@ c      read(*,*)
       PROBLEM = 0
 
 !===================== 非局部化模型：晶粒平均计算 =====================!
-!     检测是否进入新的增量步，如果是则计算上一步的晶粒平均值
+!     改进的非局部化实现，解决迭代过程中的重复累加问题
+!
+!     实现原理：
+!       1. 使用MODULE变量EQVPL_SUM和GRAIN_NPTS进行累加
+!       2. 在新增量步开始时，计算上一步的平均值并重置累加器
+!       3. 使用迭代计数器ITER_COUNT检测新的迭代开始
+!       4. 每次新迭代开始时，重置累加器（避免重复累加）
+!       5. 在当前迭代中，每个积分点累加一次
+!
+!     关键：通过检测NOEL和NPT来判断是否是新一轮迭代的开始
       IF (POROSITY.EQ.1) THEN
         IF (KINC .NE. KINC_PREV) THEN
-!         新增量步开始，计算上一步各晶粒的平均等效塑性应变
+!         新增量步开始，计算上一步的晶粒平均值
           DO I = 1, GRNUM
             IF (GRAIN_NPTS(I) .GT. 0) THEN
               EQVPL_AVG(I) = EQVPL_SUM(I) / DBLE(GRAIN_NPTS(I))
             ELSE
               EQVPL_AVG(I) = 0.0D0
             END IF
-!           重置累加器，准备下一增量步
+          END DO
+!         重置累加器和迭代计数器
+          DO I = 1, GRNUM
             EQVPL_SUM(I) = 0.0D0
             GRAIN_NPTS(I) = 0
           END DO
           KINC_PREV = KINC
+          ITER_COUNT = 0
 !         调试输出（可注释）
           IF (NOEL.EQ.1 .AND. NPT.EQ.1) THEN
-            WRITE(6,*) 'Nonlocal: KINC=', KINC, ' EQVPL_AVG updated'
+            WRITE(6,*) 'Nonlocal: New increment KINC=', KINC
+            WRITE(6,*) '  Grain 1 avg=', EQVPL_AVG(1)
+          END IF
+        ELSE
+!         同一增量步内，检测是否是新一轮迭代
+!         假设NOEL=1且NPT=1是每轮迭代的第一个调用点
+          IF (NOEL.EQ.1 .AND. NPT.EQ.1) THEN
+            ITER_COUNT = ITER_COUNT + 1
+            IF (ITER_COUNT .GT. 1) THEN
+!             新一轮迭代开始，重置累加器
+              DO I = 1, GRNUM
+                EQVPL_SUM(I) = 0.0D0
+                GRAIN_NPTS(I) = 0
+              END DO
+            END IF
           END IF
         END IF
       END IF
@@ -1078,8 +1106,12 @@ C      END DO
 !       存储状态变量
         STATEV(NSTATV-30)=POROS
         STATEV(NSTATV-29)=EQVPL
+!       调试输出（可注释）
         IF (NOEL.eq.1 .AND. NPT.eq.1) THEN
-          write(6,*) 'Porosity=', POROS, ' EQVPL_NL=', EQVPL_NL
+          write(6,*) 'KINC=', KINC, ' ITER=', ITER_COUNT,
+     2               ' Grain=', IGRAIN,
+     3               ' EQVPL=', EQVPL, ' EQVPL_NL=', EQVPL_NL,
+     4               ' GRAIN_NPTS=', GRAIN_NPTS(IGRAIN)
         END IF
       END IF
 !     计算DDSDDE的前置矩阵DDGDDE(滑移率增量对于变形增量的偏导)
